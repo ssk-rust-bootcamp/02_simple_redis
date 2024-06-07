@@ -1,0 +1,29 @@
+[package]
+name = "simple-redis"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.86"
+bytes = "1.6.0"
+dashmap = "5.5.3"
+enum_dispatch = "0.3.13"
+futures = { version = "0.3.30", default-features = false }
+lazy_static = "1.4.0"
+thiserror = "1.0.61"
+tokio = { version = "1.38.0", features = ["rt", "rt-multi-thread", "macros", "net"] }
+tokio-stream = "0.1.15"
+tokio-util = { version = "0.7.11", features = ["codec"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+winnow = { version = "0.6.13", features = ["simd"] }
+
+[dev-dependencies]
+criterion = { version = "0.5.1", features = ["html_reports"] }
+
+
+[[bench]]
+name ="resp"
+harness=false

@@ -1,0 +1,7 @@
+{
+    "rust-analyzer.checkOnSave": true,
+    "rust-analyzer.cargo.buildScripts.invocationLocation": "workspace",
+    "rust-analyzer.inlayHints.reborrowHints.enable": "never",
+    "rust-analyzer.inlayHints.closingBraceHints.enable": true,
+    "rust-analyzer.inlayHints.bindingModeHints.enable": true
+}
