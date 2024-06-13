@@ -140,13 +140,13 @@ fn calc_total_length(buf: &[u8], end: usize, len: usize, prefix: &str) -> Result
         "%" => {
             // find nth CRLF in the buffer. For map, we need to find 2 CRLF for each key-value pair
             for _ in 0..len {
-                let key_len = RespFrame::expect_length(data)?;
-                data = &data[key_len..];
-                total += key_len;
+                let len = RespFrame::expect_length(data)?;
+                data = &data[len..];
+                total += len;
 
-                let value_len = RespFrame::expect_length(data)?;
-                data = &data[value_len..];
-                total += value_len;
+                let len = RespFrame::expect_length(data)?;
+                data = &data[len..];
+                total += len;
             }
             Ok(total)
         }
@@ -171,7 +171,13 @@ fn extract_fixed_data(
     expect: &str,
     expect_type: &str,
 ) -> Result<(), RespError> {
-    if buf.len() > expect.len() {
+    println!(
+        "extract_fixed_data buf: {}, expect: {}, expect_type: {}",
+        buf.len(),
+        expect.len(),
+        expect_type
+    );
+    if buf.len() < expect.len() {
         return Err(RespError::NotComplete);
     }
     if !buf.starts_with(expect.as_bytes()) {
@@ -278,15 +284,24 @@ impl RespDecode for RespArray {
     const PREFIX: &'static str = "*";
 
     fn decode(buf: &mut BytesMut) -> Result<Self, RespError> {
+        println!("decode buf: {}", buf.len());
         let (end, len) = parse_length(buf, Self::PREFIX)?;
+
+        println!("decode end :{} ,array len: {}", end, len);
         let total_len = calc_total_length(buf, end, len, Self::PREFIX)?;
+        println!("total_len: {}", total_len);
         if buf.len() < total_len {
             return Err(RespError::NotComplete);
         }
         buf.advance(end + CRLF_LEN);
+        println!("advance end :{} ", end + CRLF_LEN);
+        println!("buf : {:?}", buf);
+
         let mut frames = Vec::with_capacity(len);
         for _ in 0..len {
+            println!("decode frame buf {:?}", buf);
             let frame = RespFrame::decode(buf)?;
+            println!("frame: {:?}, buf: {:?}", frame, buf);
             frames.push(frame);
         }
         Ok(RespArray::new(frames))
@@ -371,9 +386,9 @@ impl RespDecode for RespMap {
 
         let mut frames = RespMap::new();
         for _ in 0..len {
-            let key_frame = SimpleString::decode(buf)?;
-            let value_frame = RespFrame::decode(buf)?;
-            frames.insert(key_frame.0, value_frame);
+            let key = SimpleString::decode(buf)?;
+            let value = RespFrame::decode(buf)?;
+            frames.insert(key.0, value);
         }
         Ok(frames)
     }
@@ -473,6 +488,119 @@ mod tests {
         buf.extend_from_slice(b"\r\n");
         let frame = BulkString::decode(&mut buf)?;
         assert_eq!(frame, BulkString::new(b"hello".to_vec()));
+        Ok(())
+    }
+    #[test]
+    fn test_null_bulk_string_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"$-1\r\n");
+        let frame = RespNullBulkString::decode(&mut buf)?;
+        assert_eq!(frame, RespNullBulkString);
+        Ok(())
+    }
+    #[test]
+    fn test_null_array_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"*-1\r\n");
+        let frame = RespNullArray::decode(&mut buf)?;
+        assert_eq!(frame, RespNullArray);
+        Ok(())
+    }
+    #[test]
+    fn test_null_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"_\r\n");
+        let frame = RespNull::decode(&mut buf)?;
+        assert_eq!(frame, RespNull);
+        Ok(())
+    }
+    #[test]
+    fn test_bool_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"#t\r\n");
+        let frame = bool::decode(&mut buf)?;
+        assert!(frame);
+
+        buf.extend_from_slice(b"#f\r\n");
+        let frame = bool::decode(&mut buf)?;
+        assert!(!frame);
+        Ok(())
+    }
+    /// 测试解析RESP数组的函数。
+    /// 该函数模拟了一个简单的Redis协议解析场景，其中解析器需要从字节缓冲区中提取出一个RESP数组。
+    /// 它首先构造了一个包含Redis命令的字节缓冲区，然后尝试使用`RespArray::decode`方法解析这个缓冲区。
+    /// 最后，它将解码结果与预期值进行比较，以确保解码过程正确无误。
+    #[test]
+    fn test_array_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"*2\r\n$3\r\nset\r\n$5\r\nhello\r\n");
+
+        let frame = RespArray::decode(&mut buf)?;
+        assert_eq!(frame, RespArray::new([b"set".into(), b"hello".into()]));
+
+        buf.extend_from_slice(b"*2\r\n$3\r\nset\r\n");
+        let ret = RespArray::decode(&mut buf);
+        assert_eq!(ret.unwrap_err(), RespError::NotComplete);
+
+        buf.extend_from_slice(b"$5\r\nhello\r\n");
+        let frame = RespArray::decode(&mut buf)?;
+        assert_eq!(frame, RespArray::new([b"set".into(), b"hello".into()]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_double_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b",123.456\r\n");
+        let frame = f64::decode(&mut buf)?;
+        assert_eq!(frame, 123.456);
+        Ok(())
+    }
+
+    #[test]
+    fn test_map_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"%2\r\n+hello\r\n$5\r\nworld\r\n+foo\r\n$3\r\nbar\r\n");
+
+        let frame = RespMap::decode(&mut buf)?;
+        let mut map = RespMap::new();
+        map.insert(
+            "hello".to_string(),
+            BulkString::new(b"world".to_vec()).into(),
+        );
+        map.insert("foo".to_string(), BulkString::new(b"bar".to_vec()).into());
+        assert_eq!(frame, map);
+
+        Ok(())
+    }
+    #[test]
+    fn test_set_decode() -> Result<()> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(b"~2\r\n$3\r\nfoo\r\n$3\r\nbar\r\n");
+
+        let frame = RespSet::decode(&mut buf)?;
+        let set = RespSet::new(vec![
+            BulkString::new(b"foo".to_vec()).into(),
+            BulkString::new(b"bar".to_vec()).into(),
+        ]);
+        assert_eq!(frame, set);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_calc_array_length() -> Result<()> {
+        let buf = b"*2\r\n$3\r\nset\r\n$5\r\nhello\r\n";
+        let (end, len) = parse_length(buf, "*")?;
+        let total_len = calc_total_length(buf, end, len, "*")?;
+        assert_eq!(total_len, buf.len());
+
+        let buf = b"*2\r\n$3\r\nset\r\n";
+        let (end, len) = parse_length(buf, "*")?;
+        let ret = calc_total_length(buf, end, len, "*");
+        assert_eq!(ret.unwrap_err(), RespError::NotComplete);
+
         Ok(())
     }
 }
