@@ -39,12 +39,12 @@ pub enum RespError {
 }
 
 #[enum_dispatch(RespEncode)]
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub enum RespFrame {
     SimpleString(SimpleString),
     Error(SimpleError),
     Integer(i64),
-    BlukString(BulkString),
+    BulkString(BulkString),
     NullBulkString(RespNullBulkString),
     Array(RespArray),
     NullArray(RespNullArray),
@@ -56,27 +56,27 @@ pub enum RespFrame {
     Set(RespSet),
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
-pub struct SimpleString(String);
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+pub struct SimpleString(pub(crate) String);
 
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
-pub struct SimpleError(String);
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
-pub struct BulkString(Vec<u8>);
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+pub struct SimpleError(pub(crate) String);
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
+pub struct BulkString(pub(crate) Vec<u8>);
 
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct RespNull;
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct RespArray(Vec<RespFrame>);
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct RespArray(pub(crate) Vec<RespFrame>);
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
 pub struct RespNullArray;
-#[derive(Debug, PartialEq, Eq, PartialOrd)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Clone)]
 pub struct RespNullBulkString;
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct RespMap(BTreeMap<String, RespFrame>);
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct RespMap(pub(crate) BTreeMap<String, RespFrame>);
 
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct RespSet(Vec<RespFrame>);
+#[derive(Debug, PartialEq, PartialOrd, Clone)]
+pub struct RespSet(pub(crate) Vec<RespFrame>);
 
 impl Deref for SimpleString {
     type Target = String;
@@ -216,5 +216,16 @@ impl<const N: usize> From<&[u8; N]> for BulkString {
 impl<const N: usize> From<&[u8; N]> for RespFrame {
     fn from(s: &[u8; N]) -> Self {
         BulkString(s.to_vec()).into()
+    }
+}
+
+impl AsRef<str> for SimpleString {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+impl AsRef<[u8]> for BulkString {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
     }
 }

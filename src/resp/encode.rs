@@ -1,6 +1,6 @@
 use crate::{
-    BulkString, RespArray, RespEncode, RespMap, RespNull, RespNullArray, RespNullBulkString,
-    RespSet, SimpleError, SimpleString,
+    BulkString, RespArray, RespEncode, RespMap, RespNull, RespNullArray, RespNullBulkString, RespSet, SimpleError,
+    SimpleString,
 };
 
 /*
@@ -87,9 +87,7 @@ impl RespEncode for RespNull {
 // - boolean: "#<t|f>\r\n"
 impl RespEncode for bool {
     fn encode(self) -> Vec<u8> {
-        format!("#{}\r\n", if self { "t" } else { "f" })
-            .as_bytes()
-            .to_vec()
+        format!("#{}\r\n", if self { "t" } else { "f" }).as_bytes().to_vec()
     }
 }
 // - double: ",[<+|->]<integral>[.<fractional>][<E|e>[sign]<exponent>]\r\n"
@@ -180,10 +178,7 @@ mod tests {
             BulkString::new("world".as_bytes().to_vec()).into(),
         ])
         .into();
-        assert_eq!(
-            frame.encode(),
-            b"*3\r\n+set\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
-        );
+        assert_eq!(frame.encode(), b"*3\r\n+set\r\n$5\r\nhello\r\n$5\r\nworld\r\n");
     }
 
     #[test]
@@ -224,17 +219,11 @@ mod tests {
     #[test]
     fn test_map_encode() {
         let mut frame = RespMap::new();
-        frame.insert(
-            "hello".to_string(),
-            BulkString::new("world".to_string()).into(),
-        );
+        frame.insert("hello".to_string(), BulkString::new("world".to_string()).into());
         frame.insert("foo".to_string(), (-123.768).into());
 
         let frame: RespFrame = frame.into();
-        assert_eq!(
-            frame.encode(),
-            b"%2\r\n+foo\r\n,-123.768\r\n+hello\r\n$5\r\nworld\r\n"
-        );
+        assert_eq!(frame.encode(), b"%2\r\n+foo\r\n,-123.768\r\n+hello\r\n$5\r\nworld\r\n");
     }
 
     #[test]
@@ -244,9 +233,6 @@ mod tests {
             BulkString::new("world".as_bytes().to_vec()).into(),
         ])
         .into();
-        assert_eq!(
-            frame.encode(),
-            b"~2\r\n*2\r\n:+1234\r\n#t\r\n$5\r\nworld\r\n"
-        );
+        assert_eq!(frame.encode(), b"~2\r\n*2\r\n:+1234\r\n#t\r\n$5\r\nworld\r\n");
     }
 }

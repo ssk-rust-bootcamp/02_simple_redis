@@ -19,8 +19,8 @@
 use bytes::{Buf, BytesMut};
 
 use crate::{
-    BulkString, RespArray, RespDecode, RespError, RespFrame, RespMap, RespNull, RespNullArray,
-    RespNullBulkString, RespSet, SimpleError, SimpleString,
+    BulkString, RespArray, RespDecode, RespError, RespFrame, RespMap, RespNull, RespNullArray, RespNullBulkString,
+    RespSet, SimpleError, SimpleString,
 };
 
 const CRLF: &[u8] = b"\r\n";
@@ -166,11 +166,7 @@ fn exttra_simple_frame_data(buf: &[u8], prefix: &str) -> Result<usize, RespError
     let end = find_crlf(buf, 1).ok_or(RespError::NotComplete)?;
     Ok(end)
 }
-fn extract_fixed_data(
-    buf: &mut BytesMut,
-    expect: &str,
-    expect_type: &str,
-) -> Result<(), RespError> {
+fn extract_fixed_data(buf: &mut BytesMut, expect: &str, expect_type: &str) -> Result<(), RespError> {
     println!(
         "extract_fixed_data buf: {}, expect: {}, expect_type: {}",
         buf.len(),
@@ -232,10 +228,7 @@ impl RespDecode for i64 {
         let s = String::from_utf8_lossy(&data[Self::PREFIX.len()..end]);
         match s.parse() {
             Ok(n) => Ok(n),
-            Err(_) => Err(RespError::InvalidFrameType(format!(
-                "expect : i64, but got {}",
-                s
-            ))),
+            Err(_) => Err(RespError::InvalidFrameType(format!("expect : i64, but got {}", s))),
         }
     }
 
@@ -565,10 +558,7 @@ mod tests {
 
         let frame = RespMap::decode(&mut buf)?;
         let mut map = RespMap::new();
-        map.insert(
-            "hello".to_string(),
-            BulkString::new(b"world".to_vec()).into(),
-        );
+        map.insert("hello".to_string(), BulkString::new(b"world".to_vec()).into());
         map.insert("foo".to_string(), BulkString::new(b"bar".to_vec()).into());
         assert_eq!(frame, map);
 
