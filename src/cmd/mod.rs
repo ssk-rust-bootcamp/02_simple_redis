@@ -22,6 +22,7 @@ pub enum CommandError {
 }
 
 #[enum_dispatch[CommandExecutor]]
+#[derive(Debug)]
 pub enum Command {
     Get(Get),
     Set(Set),
@@ -84,7 +85,16 @@ impl TryFrom<RespArray> for Command {
         }
     }
 }
+impl TryFrom<RespFrame> for Command {
+    type Error = CommandError;
 
+    fn try_from(value: RespFrame) -> Result<Self, Self::Error> {
+        match value {
+            RespFrame::Array(array) => array.try_into(),
+            _ => Err(CommandError::InvalidCommand("Command must be an array".to_string())),
+        }
+    }
+}
 fn validate_command(value: &RespArray, names: &[&'static str], n_args: usize) -> Result<(), CommandError> {
     if value.len() != n_args + names.len() {
         return Err(CommandError::InvalidArgument(format!(
