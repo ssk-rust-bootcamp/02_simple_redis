@@ -4,7 +4,9 @@ use criterion::{black_box, criterion_group, criterion_main};
 use simple_redis::parse_frame;
 use simple_redis::parse_frame_length;
 use simple_redis::RespFrame;
-const DATA: &str = "+OK\r\n-ERR\r\n:1000\r\n$6\r\nfoobar\r\n$-1\r\n*2\r\n+hello\r\n$5\r\nworld\r\n+foo\r\n$3\r\\nbar\\r\n%2\r\n+foo\r\n,-123456.789\r\n+hello\r\n$5\r\nworld\r\n*3\r\n$3\r\nset\r\n$5\r\nhello\\r\n$5\r\\nworld\r\n%2\r\n+hello\r\n$5\r\nworld\r\n+foo\r\n$3\r\nbar\r\n";
+const DATA: &str = "+OK\r\n-ERR\r\n:1000\r\n$6\r\nfoobar\r\n$-1\r\n*2\r\n+hello\r\n$5\r\nworld\r\n+foo\r\n$3\r\\nbar\\\
+                    r\n%2\r\n+foo\r\n,-123456.789\r\n+hello\r\n$5\r\nworld\r\n*3\r\n$3\r\nset\r\n$5\r\nhello\\r\n$5\r\\
+                    \nworld\r\n%2\r\n+hello\r\n$5\r\nworld\r\n+foo\r\n$3\r\nbar\r\n";
 
 fn v1_decode(buf: &mut BytesMut) -> Result<Vec<RespFrame>> {
     use simple_redis::RespDecode;
