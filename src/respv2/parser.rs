@@ -1,9 +1,9 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, num::NonZeroUsize};
 
 use winnow::{
     ascii::{digit1, float},
     combinator::{alt, dispatch, fail, opt, preceded, terminated},
-    error::{ContextError, ErrMode},
+    error::{ContextError, ErrMode, Needed},
     token::{any, take, take_until},
     PResult, Parser,
 };
@@ -64,8 +64,22 @@ pub fn parse_frame(input: &mut &[u8]) -> PResult<RespFrame> {
     .parse_next(input)
 }
 
+fn simple_string(input: &mut &[u8]) -> PResult<SimpleString> {
+    parse_string.map(SimpleString).parse_next(input)
+}
+fn error(input: &mut &[u8]) -> PResult<SimpleError> {
+    parse_string.map(SimpleError).parse_next(input)
+}
+// - null bulk string: "$-1\r\n"
 fn null_bulk_string(input: &mut &[u8]) -> PResult<RespNullBulkString> {
     "-1\r\n".value(RespNullBulkString).parse_next(input)
+}
+// - integer: ":1234\r\n"
+fn integer(input: &mut &[u8]) -> PResult<i64> {
+    let sign = opt(alt(('+', '-'))).parse_next(input)?.unwrap_or('+');
+    let sign: i64 = if sign == '+' { 1 } else { -1 };
+    let v: i64 = terminated(digit1.parse_to(), CRLF).parse_next(input)?;
+    Ok(sign * v)
 }
 // - bulk string: "$6\r\nfoobar\r\n"
 #[allow(clippy::comparison_chain)]
@@ -82,28 +96,31 @@ fn bulk_string(input: &mut &[u8]) -> PResult<BulkString> {
     Ok(BulkString(data))
 }
 
-fn simple_string(input: &mut &[u8]) -> PResult<SimpleString> {
-    parse_string.map(SimpleString).parse_next(input)
-}
 
-fn error(input: &mut &[u8]) -> PResult<SimpleError> {
-    parse_string.map(SimpleError).parse_next(input)
-}
-// - integer: ":1234\r\n"
-fn integer(input: &mut &[u8]) -> PResult<i64> {
-    let sign = opt(alt(('+', '-'))).parse_next(input)?.unwrap_or('+');
-    let sign: i64 = if sign == '+' { 1 } else { -1 };
-    let v: i64 = terminated(digit1.parse_to(), CRLF).parse_next(input)?;
-    Ok(sign * v)
-}
 fn bulk_string_len(input: &mut &[u8]) -> PResult<()> {
-    let len = integer.parse_next(input)?;
+    // let len = integer.parse_next(input)?;
+    // if len == 0 || len == -1 {
+    //     return Ok(());
+    // } else if len < -1 {
+    //     return Err(err_cut("bulk string length must be non-negative"));
+    // }
+    // terminated(take(len as usize), CRLF).value(()).parse_next(input)
+    let len: i64 = integer.parse_next(input)?;
     if len == 0 || len == -1 {
         return Ok(());
     } else if len < -1 {
         return Err(err_cut("bulk string length must be non-negative"));
     }
-    terminated(take(len as usize), CRLF).value(()).parse_next(input)
+
+    // we don't really need to parse the data, just skip it
+    // this is a good optimization
+    let len_with_crlf = len as usize + 2;
+    if input.len() < len_with_crlf {
+        let size = NonZeroUsize::new((len_with_crlf - input.len()) as usize).unwrap();
+        return Err(ErrMode::Incomplete(Needed::Size(size)));
+    }
+    *input = &input[(len + 2) as usize..];
+    Ok(())
 }
 
 // - null array: "*-1\r\n"
@@ -127,16 +144,6 @@ fn array(input: &mut &[u8]) -> PResult<RespArray> {
     Ok(RespArray(arr))
 }
 
-// - null: "_\r\n"
-fn null(input: &mut &[u8]) -> PResult<RespNull> {
-    CRLF.value(RespNull).parse_next(input)
-}
-
-fn err_cut(_s: impl Into<String>) -> ErrMode<ContextError> {
-    let context = ContextError::default();
-    ErrMode::Cut(context)
-}
-
 fn array_len(input: &mut &[u8]) -> PResult<()> {
     let len = integer.parse_next(input)?;
     if len == 0 || len == -1 {
@@ -149,6 +156,37 @@ fn array_len(input: &mut &[u8]) -> PResult<()> {
     }
     Ok(())
 }
+// - boolean: "#t\r\n"
+fn boolean(input: &mut &[u8]) -> PResult<bool> {
+    let b = alt(('t', 'f')).parse_next(input)?;
+    Ok(b == 't')
+}
+
+// - float: ",3.14\r\n"
+fn double(input: &mut &[u8]) -> PResult<f64> {
+    terminated(float, CRLF).parse_next(input)
+}
+
+// - map: "%2\r\n+foo\r\n-bar\r\n"
+fn map(input: &mut &[u8]) -> PResult<RespMap> {
+    let len: i64 = integer.parse_next(input)?;
+    if len <= 0 {
+        return Err(err_cut("map length must be non-negative"));
+    }
+    let len = len as usize / 2;
+    let mut map = BTreeMap::new();
+    for _ in 0..len {
+        let key = preceded('+', parse_string).parse_next(input)?;
+        let value = parse_frame(input)?;
+        map.insert(key, value);
+    }
+    Ok(RespMap(map))
+}
+// - null: "_\r\n"
+fn null(input: &mut &[u8]) -> PResult<RespNull> {
+    CRLF.value(RespNull).parse_next(input)
+}
+
 fn map_len(input: &mut &[u8]) -> PResult<()> {
     let len = integer.parse_next(input)?;
     if len <= 0 {
@@ -169,28 +207,8 @@ fn parse_string(input: &mut &[u8]) -> PResult<String> {
         .parse_next(input)
 }
 
-// - boolean: "#t\r\n"
-fn boolean(input: &mut &[u8]) -> PResult<bool> {
-    let b = alt(('t', 'f')).parse_next(input)?;
-    Ok(b == 't')
-}
 
-// - float: ",3.14\r\n"
-fn double(input: &mut &[u8]) -> PResult<f64> {
-    terminated(float, CRLF).parse_next(input)
-}
-// - map: "%2\r\n+foo\r\n-bar\r\n"
-fn map(input: &mut &[u8]) -> PResult<RespMap> {
-    let len: i64 = integer.parse_next(input)?;
-    if len <= 0 {
-        return Err(err_cut("map length must be non-negative"));
-    }
-    let len = len as usize / 2;
-    let mut map = BTreeMap::new();
-    for _ in 0..len {
-        let key = preceded('+', parse_string).parse_next(input)?;
-        let value = parse_frame(input)?;
-        map.insert(key, value);
-    }
-    Ok(RespMap(map))
+fn err_cut(_s: impl Into<String>) -> ErrMode<ContextError> {
+    let context = ContextError::default();
+    ErrMode::Cut(context)
 }
