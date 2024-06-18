@@ -90,7 +90,11 @@ impl RespArray {
         RespArray(s.into())
     }
 }
-
+impl From<Vec<RespFrame>> for RespArray {
+    fn from(s: Vec<RespFrame>) -> Self {
+        RespArray(s)
+    }
+}
 #[cfg(test)]
 mod tests {
     use crate::{BulkString, SimpleString};

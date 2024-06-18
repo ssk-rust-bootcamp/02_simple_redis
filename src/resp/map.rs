@@ -74,6 +74,11 @@ impl Default for RespMap {
         RespMap::new()
     }
 }
+impl From<BTreeMap<String, RespFrame>> for RespMap {
+    fn from(value: BTreeMap<String, RespFrame>) -> Self {
+        RespMap(value)
+    }
+}
 
 #[cfg(test)]
 mod tests {
