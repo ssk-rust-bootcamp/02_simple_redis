@@ -1,13 +1,12 @@
-use bytes::BytesMut;
-use enum_dispatch::enum_dispatch;
-
 use crate::{
     BulkString, RespArray, RespDecode, RespError, RespMap, RespNull, RespNullArray, RespNullBulkString, RespSet,
     SimpleError, SimpleString,
 };
+use bytes::BytesMut;
+use enum_dispatch::enum_dispatch;
 
 #[enum_dispatch(RespEncode)]
-#[derive(Debug, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum RespFrame {
     SimpleString(SimpleString),
     Error(SimpleError),
@@ -17,7 +16,6 @@ pub enum RespFrame {
     Array(RespArray),
     NullArray(RespNullArray),
     Null(RespNull),
-
     Boolean(bool),
     Double(f64),
     Map(RespMap),
@@ -26,7 +24,6 @@ pub enum RespFrame {
 
 impl RespDecode for RespFrame {
     const PREFIX: &'static str = "";
-
     fn decode(buf: &mut BytesMut) -> Result<Self, RespError> {
         let mut iter = buf.iter().peekable();
         match iter.peek() {
@@ -38,32 +35,36 @@ impl RespDecode for RespFrame {
                 let frame = SimpleError::decode(buf)?;
                 Ok(frame.into())
             }
-
             Some(b':') => {
                 let frame = i64::decode(buf)?;
                 Ok(frame.into())
             }
-            Some(b'$') => match RespNullBulkString::decode(buf) {
-                Ok(frame) => Ok(frame.into()),
-                Err(RespError::NotComplete) => Err(RespError::NotComplete),
-                Err(_) => {
-                    let frame = BulkString::decode(buf)?;
-                    Ok(frame.into())
+            Some(b'$') => {
+                // try null bulk string first
+                match RespNullBulkString::decode(buf) {
+                    Ok(frame) => Ok(frame.into()),
+                    Err(RespError::NotComplete) => Err(RespError::NotComplete),
+                    Err(_) => {
+                        let frame = BulkString::decode(buf)?;
+                        Ok(frame.into())
+                    }
                 }
-            },
-            Some(b'*') => match RespNullArray::decode(buf) {
-                Ok(frame) => Ok(frame.into()),
-                Err(RespError::NotComplete) => Err(RespError::NotComplete),
-                Err(_) => {
-                    let frame = RespArray::decode(buf)?;
-                    Ok(frame.into())
+            }
+            Some(b'*') => {
+                // try null array first
+                match RespNullArray::decode(buf) {
+                    Ok(frame) => Ok(frame.into()),
+                    Err(RespError::NotComplete) => Err(RespError::NotComplete),
+                    Err(_) => {
+                        let frame = RespArray::decode(buf)?;
+                        Ok(frame.into())
+                    }
                 }
-            },
+            }
             Some(b'_') => {
                 let frame = RespNull::decode(buf)?;
                 Ok(frame.into())
             }
-
             Some(b'#') => {
                 let frame = bool::decode(buf)?;
                 Ok(frame.into())
@@ -80,6 +81,7 @@ impl RespDecode for RespFrame {
                 let frame = RespSet::decode(buf)?;
                 Ok(frame.into())
             }
+            None => Err(RespError::NotComplete),
             _ => Err(RespError::InvalidFrameType(format!(
                 "expect_length: unknown frame type: {:?}",
                 buf
@@ -106,8 +108,8 @@ impl RespDecode for RespFrame {
 }
 
 impl From<&str> for RespFrame {
-    fn from(value: &str) -> Self {
-        SimpleString(value.to_string()).into()
+    fn from(s: &str) -> Self {
+        SimpleString(s.to_string()).into()
     }
 }
 
@@ -123,8 +125,7 @@ impl<const N: usize> From<&[u8; N]> for RespFrame {
     }
 }
 
-impl AsRef<str> for SimpleString {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+#[cfg(test)]
+mod tests {
+    // TODO: Add tests
 }
