@@ -3,7 +3,7 @@ mod bool;
 mod bulk_string;
 mod doubble;
 mod frame;
-mod interger;
+mod integer;
 mod map;
 mod null;
 mod set;
